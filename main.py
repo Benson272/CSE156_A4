@@ -8,18 +8,21 @@ ngrams = {1 : {}, 2 : {}, 3 : {}, 4 : {}}
 word_counts = {}
 
 def categorize(word):
-  # words with -ase is usually gene
-  # if "ase" in word or "xin" in word:
-  #   return "_ASE_" 
+  #words with -ase is usually gene
+  if "ase" in word or "xin" in word:
+    return "_ASE_" 
   
   #more than one capital (usually names, or abbreviations)
-  # count_upper = 0
-  # for letter in word:
-  #   if letter.isupper():
-  #     count_upper += 1
+  count_upper = 0
+  for letter in word:
+    if letter.isupper():
+      count_upper += 1
+      # print("IN HERE", word)
+      
   
-  # if count_upper > 1:
-  #   return "_UPPER_" 
+  if count_upper > 1:
+    
+    return "_UPPER_" 
   
   
   #letters and numbers are usually genes
@@ -34,16 +37,16 @@ def categorize(word):
   if contains_letter and contains_number:
     return "_ALPHA_NUMERIC_"
   
-  # if word[0].isupper():
-  #   return "_PROPER_"
+  if word[0].isupper():
+    return "_PROPER_"
   
-  # #uncapitalized words (ususally just regular english words)
-  # if word.isalpha() and word.islower():
-  #   return "_LOWER_"
+  #uncapitalized words (ususally just regular english words)
+  if word.isalpha() and word.islower():
+    return "_LOWER_"
   
-  # # single letter capital (ex. hepatitis-B)
-  # if len(word) == 1 and word.isupper():
-  #   return "_ONE_CAPITAL_"
+  # single letter capital (ex. hepatitis-B)
+  if len(word) == 1 and word.isupper():
+    return "_ONE_CAPITAL_"
   
   
   
@@ -53,7 +56,7 @@ def categorize(word):
   return "_RARE_"
 
 def count_words(count_file):
-  with open(count_file) as f:
+  with open(count_file, encoding='utf-16') as f:
     lines = f.readlines()
     for line in lines:
       t = line.strip().split()
@@ -70,7 +73,7 @@ def count_words(count_file):
     
     
 def parse_count_file(file_path):
-  with open(file_path) as f:
+  with open(file_path, encoding='utf-16') as f:
     lines = f.readlines()
     for line in lines:
       results = line.split()
@@ -98,6 +101,7 @@ def compute_emissions(word, tag):
   # if not word_exist:
   #   count_word = wordtag_dict[(tag, "_RARE_")]
   # else:
+
   count_word = wordtag_dict.get((tag,word), 0)
     
   #count_total_tag = n_gram_dict[(tag,)]
@@ -143,13 +147,12 @@ def compute_q_four(prev_tag3, prev_tag2, prev_tag1, tag ):
   count_trigram = ngrams[3][(prev_tag3, prev_tag2, prev_tag1)]
   return count_four_gram / count_trigram
 
+
+my_set = {"TEST"}
 #creates dynamic 
 def define_table_four(sentence):
-  start_with_O = ngrams[3][("*", "*", "O")]
-  start_with_GENE = ngrams[3][("*", "*", "I-GENE")]
   table = {
-    (2, "*", "*", "O") : start_with_O / (start_with_O + start_with_GENE), 
-    (2, "*", "*", "I-GENE") : start_with_GENE / (start_with_O + start_with_GENE)
+    (2, "*", "*", "*") : 1
   }
   bp = {
     
@@ -158,16 +161,19 @@ def define_table_four(sentence):
   possible_tags_per_position = []
   possible_tags_per_position.append(["*"])
   possible_tags_per_position.append(["*"])
-  for _ in range(2, len(sentence) - 1): # -1 to account for STOP
+  possible_tags_per_position.append(["*"])
+  for _ in range(3, len(sentence) - 1): # -1 to account for STOP
     possible_tags_per_position.append(["O", "I-GENE"])
   
   #loop from first word to last word
+
   for k in range(3, len(sentence) -1):
     for x in possible_tags_per_position[k-2]:
       for u in possible_tags_per_position[k-1]:
         for v in possible_tags_per_position[k]:
           viterbi_results = []
           for w in possible_tags_per_position[k-3]:
+            
             viterbi_results.append((table[(k-1, w, x, u)] * compute_q_four(w, x, u, v) * compute_emissions(sentence[k], v), w))
             
           maximum = viterbi_results[0]
@@ -178,7 +184,7 @@ def define_table_four(sentence):
               
           table[(k,x, u,v)] = maximum[0]
           bp[(k,x,u,v)] = maximum[1] # gets the tag that gave max value
-        
+   
   solution_tags = ["TEMP"] * (len(sentence) - 1) # remove STOP
   
   # find the last two tags
@@ -202,10 +208,13 @@ def define_table_four(sentence):
   solution_tags[len(sentence) - 3] = u  #second to last word gets tag u
   solution_tags[len(sentence) - 4] = x  #third to last word gets tag x
   
-  for k in range(len(sentence) - 5,1,-1):
+  for k in range(len(sentence) - 5,2,-1):
     solution_tags[k] = bp[(k+3, solution_tags[k+1], solution_tags[k+2], solution_tags[k+3])]
 
-  return solution_tags[2:]
+
+  # print(table)
+  # print(solution_tags[3:])
+  return solution_tags[3:]
 
 
 
@@ -324,7 +333,7 @@ def trigram(count_file):
       word = line.strip()
       if word_counts.get(word,0) < 5:
         if "categorized" in count_file:
-          word = categorize(line[0])
+          word = categorize(line)
         else:
           word = "_RARE_"
       curr_sentence.append(word.replace("\n", ""))
@@ -370,14 +379,14 @@ def four_gram(count_file):
       word = line.strip()
       if word_counts.get(word,0) < 5:
         if "categorized" in count_file:
-          word = categorize(line[0])
+          word = categorize(line)
         else:
           word = "_RARE_"
       curr_sentence.append(word.replace("\n", ""))
     
     #loop through each sentence
     for i, sentence in enumerate(sentences):
-      padded_sentence = ["*", "*"] + sentence + ["STOP"]
+      padded_sentence = ["*", "*", "*"] + sentence + ["STOP"]
       solution_tags = define_table_four(padded_sentence)
       
       for item in zip(sentences_unaltered[i], solution_tags):
@@ -397,12 +406,15 @@ if __name__ == "__main__":
   count_words(count_file)
   parse_count_file(count_file)
 
+
   if model == "baseline":
     baseline(count_file)
   elif model == "trigram":
     trigram(count_file)
   elif model == "4":
     four_gram(count_file)
+
+  print(my_set)   
     
   
   
